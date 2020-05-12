@@ -1,27 +1,37 @@
 version: 1
 cloud:
-  provider: aws-ecs
+  provider: aws-ecs # Are you thinking there might be multiple provider types on top of AWS? Like aws-ec2 or something?
   ecs_cluster_name: singer
   bucket_name: some-bucket
+  docker_base_image: image:tag # optional; will use this base image or default to python:3.8 if not provided
+  dockerfile: <path> # optional; will prepend this dockerfile onto the DOCKERFILE_TEMPLATE in docker.py
+  configs-path: configs # optional; default value is configs. Will put configs into relative dir configs. The run-pipeline command will look here. The push and pull commands will look here to sync
+  catalogs-path: catalogs # optional
+  states-path: states # optional
 taps:
   tap-salesforce:
-    repo: git@github.com:singer-io/tap-salesforce.git
-    default_singer_config:
+    package: tap-salesforce==1.4.32 # Specify any valid pip-installable package reference or repository. This format would look in pypi. Version is optional and used directly by pip. E.g. "pip install tap-salesforce==1.4.32"
+    default_config:
       start_date: 2010-01-01T00:00:00Z
       api_type: BULK
       select_fields_by_default: true
       client_id: 50f0676f76117269baeaed2ee07979986711b79
-      client_secret: secret://sf/client_secret
+      client_secret: secret://sf/client_secret # Convention is pull the value from Secrets Manager if the prefix "secret://" is present; otherwise use the value as is
       disable_collection: true
   tap-stripe:
-    repo: git@github.com:singer-io/tap-stripe.git
-    default_singer_config:
+    package: git@github.com:singer-io/tap-stripe.git # Specify any valid pip-installable package reference or repository. This format would install the latest commit directly from github, from the default branch using "pip install git+ssh://git@github.com:singer-io/tap-stripe.git#egg=tap_stripe", adding prefix git+ssh:// and suffix #egg=tap_stripe as a matter of convenience, if not already present. See https://pip.pypa.io/en/stable/reference/pip_install/#git
+    default_config:
       start_date: 2010-01-01T00:00:00Z
       disable_collection: true
+  tap-my-internal-api: # example showing how to configure a brand new tap that you are developing locally
+    package: /usr/adam/dev/tap-my-internal-api # will install with "pip install -e /usr/adam/dev/tap-my-internal-api"
+    default_config:
+      api_base_url: https://10.1.1.1/api
+      api_key: 12345
 targets:
   target-postgres:
-    repo: git@github.com:datamill-co/target-postgres.git
-    default_singer_config:
+    package: git@github.com:datamill-co/target-postgres.git@v0.2.4 # Specify any valid pip-installable package reference or repository. This format would install the specified version
+    default_config:
       postgres_host: warehouse.someawsaccount.us-east-1.rds.amazonaws.com
       postgres_database: prod
       postgres_username: singer
@@ -29,36 +39,40 @@ targets:
       disable_collection: true
 pipelines:
   sf_sales:
-    schedule: 0 3 * * *
+    schedules: 
+      - 0 3 * * *
     tap_config:
       tap: tap-salesforce
-      singer_config:
+      config:
         refresh_token: secret://sf_sales/refresh_token
-      catalog: s3://some-bucket/singer/catalogs/sf_sales.json
+      catalog: sf_sales.json # this will look for a catalog file at s3://some-bucket/singer/catalogs/tap-salesforce/sf_sales.json
+      state: sf_sales.json # this will look for and update a state file at s3://some-bucket/singer/states/tap-salesforce/sf_sales.json
     target_config:
       target: target-postgres
-      singer_config:
+      config:
         postgres_schema: sf_sales
   sf_marketing:
-    schedule: 0 4 * * *
+    schedules: 
+      - 0 4 * * *
     tap_config:
       tap: tap-salesforce
-      singer_config:
+      config:
         refresh_token: secret://sf_marketing/refresh_token
-      catalog: s3://some-bucket/singer/catalogs/sf_marketing.json
+      catalog: sf_marketing.json
     target_config:
       target: target-postgres
-      singer_config:
+      config:
         postgres_schema: sf_marketing
   stripe:
-    schedule: 0 3 * * *
+    schedules: 
+      - 0 3 * * *
     tap_config:
       tap: tap-stripe
-      singer_config:
+      config:
         client_secret: secret://stripe/client_secret
         account_id: acct_a1b2c4d5e6f7g8h9
-      catalog: s3://some-bucket/singer/catalogs/stripe.json
+      catalog: stripe.json
     target_config:
       target: target-postgres
-      singer_config:
+      config:
         postgres_schema: stripe

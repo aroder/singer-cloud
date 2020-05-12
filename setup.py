@@ -8,6 +8,8 @@ setup(
     classifiers=['Programming Language :: Python :: 3 :: Only'],
     py_modules=['singer_cloud'],
     install_requires=[
+        'click==7.1.2',
+        'PyYAML==5.3.1'
     ],
     entry_points='''
       [console_scripts]
